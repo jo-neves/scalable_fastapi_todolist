@@ -1,22 +1,38 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path
 
+from fastapi.security import OAuth2PasswordBearer
+from jwt import InvalidTokenError
 from pydantic import AfterValidator
-from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise.transactions import in_transaction
 
 from data.entities.data_item import DataItem
-from data.entities.data_user import DataUser
-from lib.HTTPException_utils import raise_if_user_has_no_permissions
-from lib.list_utils import try_get
-from lib.ulid_validators import validate_str_ulid
-from models.mapper_utils import data_item_to_model, update_data_item_from_model
-from models.common import StatusResponse
-from models.items import Item, NewItem
-from models.users import User
-from routers.auth import get_jwt_data_user_async, get_jwt_user_async
+from shared.lib.HTTPException_utils import raise_if_user_has_no_permissions
+from shared.lib.jwt_utils import decode_token
+from shared.lib.list_utils import try_get
+from shared.lib.ulid_validators import validate_str_ulid
+from shared.lib.HTTPException_utils import invalid_credentials_exception
+from shared.models.status_response_dto import StatusResponse
+from shared.models.items_dtos import Item, NewItem
+from shared.models.mapper_utils import data_item_to_model, update_data_item_from_model
+from shared.models.user_dto import User
+from users_api.clients.users import get_user_by_ulid_async
 
 api_user_items_router = APIRouter(prefix="/users/{user_ulid}/items")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/openapi/logins")
+
+
+# TODO: Add caching here.
+async def get_jwt_user_async(
+    token: Annotated[str, Depends(oauth2_scheme)],
+) -> User | None:
+    try:
+        token_data = decode_token(token=token)
+
+    except InvalidTokenError:
+        raise invalid_credentials_exception
+
+    return (await get_user_by_ulid_async(token_data.sub)).content
 
 
 # TODO: add pagination.
@@ -29,11 +45,9 @@ async def get_all_items(
         token_user_ulid=current_user.ulid, request_user_ulid=user_ulid
     )
 
-    all_user_items = await DataItem.filter(user__ulid=current_user.ulid)
+    all_user_items = await DataItem.filter(user_ulid=current_user.ulid)
 
-    all_user_items = [
-        data_item_to_model(item, str(user_ulid)) for item in all_user_items
-    ]
+    all_user_items = [data_item_to_model(item) for item in all_user_items]
 
     return StatusResponse(
         status_code=200,
@@ -47,7 +61,7 @@ async def get_item(
     user_ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     current_user: Annotated[User, Depends(get_jwt_user_async)],
-):
+) -> StatusResponse[Item]:
     raise_if_user_has_no_permissions(
         token_user_ulid=current_user.ulid, request_user_ulid=user_ulid
     )
@@ -60,7 +74,7 @@ async def get_item(
     return StatusResponse(
         status_code=200,
         message=f"Item '{data_item.ulid}' found",
-        content=data_item_to_model(data_item=data_item, user_ulid=str(user_ulid)),
+        content=data_item_to_model(data_item),
     )
 
 
@@ -68,13 +82,13 @@ async def get_item(
 async def create_item(
     user_ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     item: NewItem,
-    current_data_user: Annotated[DataUser, Depends(get_jwt_data_user_async)],
-):
+    current_user: Annotated[User, Depends(get_jwt_user_async)],
+) -> StatusResponse[Item]:
     raise_if_user_has_no_permissions(
-        token_user_ulid=current_data_user.ulid, request_user_ulid=user_ulid
+        token_user_ulid=current_user.ulid, request_user_ulid=user_ulid
     )
 
-    new_data_item = update_data_item_from_model(DataItem(), item, current_data_user)
+    new_data_item = update_data_item_from_model(DataItem(), item)
 
     async with in_transaction():
         await new_data_item.save()
@@ -82,7 +96,7 @@ async def create_item(
     return StatusResponse(
         status_code=201,
         message=f"Item '{new_data_item.ulid}' created",
-        content=data_item_to_model(data_item=new_data_item, user_ulid=str(user_ulid)),
+        content=data_item_to_model(data_item=new_data_item),
     )
 
 
@@ -91,20 +105,20 @@ async def update_item(
     user_ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     item: Item,
-    current_data_user: Annotated[DataUser, Depends(get_jwt_data_user_async)],
-):
+    current_user: Annotated[User, Depends(get_jwt_user_async)],
+) -> StatusResponse[Item]:
     raise_if_user_has_no_permissions(
-        token_user_ulid=current_data_user.ulid, request_user_ulid=user_ulid
+        token_user_ulid=current_user.ulid, request_user_ulid=user_ulid
     )
 
-    data_item = await DataItem.get(ulid=ulid)
-    update_data_item_from_model(data_item, item, current_data_user)
+    data_item = await DataItem.get(ulid=ulid, user_ulid=current_user.ulid)
+    update_data_item_from_model(data_item, item)
     await data_item.save()
 
     return StatusResponse(
         status_code=200,
         message=f"Item '{ulid}' updated",
-        content=data_item_to_model(data_item=data_item, user_ulid=str(user_ulid)),
+        content=data_item_to_model(data_item=data_item),
     )
 
 
@@ -112,13 +126,15 @@ async def update_item(
 async def delete_item(
     user_ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
-    current_data_user: Annotated[DataUser, Depends(get_jwt_data_user_async)],
-):
+    current_user: Annotated[User, Depends(get_jwt_user_async)],
+) -> StatusResponse:
     raise_if_user_has_no_permissions(
-        token_user_ulid=current_data_user.ulid, request_user_ulid=user_ulid
+        token_user_ulid=current_user.ulid, request_user_ulid=user_ulid
     )
 
-    deleted_count = await DataItem.filter(ulid=ulid, user_id=current_data_user.id).delete()
+    deleted_count = await DataItem.filter(
+        ulid=ulid, user_ulid=current_user.ulid
+    ).delete()
 
     if not deleted_count:
         raise HTTPException(status_code=404, detail=f"Item '{ulid}' not found")

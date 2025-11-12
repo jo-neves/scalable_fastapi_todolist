@@ -1,0 +1,41 @@
+services:
+  auth_api:
+    container_name: auth_api
+    build:
+      context: .
+      dockerfile: auth_api/Dockerfile
+    ports:
+      - "8000:8000"
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: .
+  users_api:
+    container_name: users_api
+    depends_on:
+      - auth_api
+    build:
+      context: .
+      dockerfile: users_api/Dockerfile
+    ports:
+      - "8001:8000"
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: .
+  todo_api:
+    container_name: todo_api
+    depends_on:
+      - users_api
+    build:
+      context: .
+      dockerfile: todo_api/Dockerfile
+    ports:
+      - "8002:8000"
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: .
