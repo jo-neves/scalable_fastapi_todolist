@@ -13,6 +13,8 @@ services:
         - action: sync
           path: ./auth_api
           target: /app
+          ignore:
+            - .venv/
 
   users_api:
     container_name: users_api
@@ -30,6 +32,8 @@ services:
         - action: sync
           path: ./users_api
           target: /app
+          ignore:
+            - .venv/
 
   todo_api:
     container_name: todo_api
@@ -47,6 +51,8 @@ services:
         - action: sync
           path: ./users_api
           target: /app
+          ignore:
+            - .venv/
 
 volumes:
   auth_api_data:

@@ -2,13 +2,6 @@ FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1
 
-WORKDIR /app
-
-# Install UV.
-# https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
-# https://hub.docker.com/r/astral/uv
-COPY --from=docker.io/astral/uv:latest /uv /uvx /bin/
-
 # Activate the project virtual environment by placing its binary directory at the front of the path.
 # https://docs.astral.sh/uv/guides/integration/docker/#using-the-environment
 ENV PATH="/.venv/bin:$PATH"
@@ -21,17 +14,27 @@ ENV UV_COMPILE_BYTECODE=1
 # https://docs.astral.sh/uv/guides/integration/docker/#caching
 ENV UV_LINK_MODE=copy
 
+WORKDIR /app
+
+# Install UV.
+# https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
+# https://hub.docker.com/r/astral/uv
+COPY --from=docker.io/astral/uv:latest /uv /uvx /bin/
+
 # Install dependencies.
 # https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=auth_api/uv.lock,target=/app/uv.lock \
+    --mount=type=bind,source=auth_api/pyproject.toml,target=/app/pyproject.toml \
     uv sync --frozen --no-install-project
 
-ENV PYTHONPATH=./
-
 # Copy the project into the image.
-COPY . ./
+COPY ./shared ./shared
+COPY auth_api ./auth_api
+
+WORKDIR /app/auth_api
+
+ENV PYTHONPATH="/app:${PYTHONPATH}"
 
 # Sync the project
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
