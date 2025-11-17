@@ -1,22 +1,24 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Path
 
+from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.security import OAuth2PasswordBearer
 from jwt import InvalidTokenError
 from pydantic import AfterValidator
 from tortoise.transactions import in_transaction
 
-from data.entities.data_item import DataItem
-from shared.lib.HTTPException_utils import raise_if_user_has_no_permissions
+from shared.clients.users_client import get_user_by_ulid_async
+from shared.lib.HTTPException_utils import (
+    invalid_credentials_exception,
+    raise_if_user_has_no_permissions,
+)
 from shared.lib.jwt_utils import decode_token
 from shared.lib.list_utils import try_get
 from shared.lib.ulid_validators import validate_str_ulid
-from shared.lib.HTTPException_utils import invalid_credentials_exception
-from shared.models.status_response_dto import StatusResponse
 from shared.models.items_dtos import Item, NewItem
-from shared.models.mapper_utils import data_item_to_model, update_data_item_from_model
+from shared.models.status_response_dto import StatusResponse
 from shared.models.user_dto import User
-from users_api.clients.users import get_user_by_ulid_async
+from todo_api.data.entities.data_item import DataItem
+from todo_api.data.mapper_utils import data_item_to_model, update_data_item_from_model
 
 api_user_items_router = APIRouter(prefix="/users/{user_ulid}/items")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/openapi/logins")

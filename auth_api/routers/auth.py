@@ -1,48 +1,48 @@
 from datetime import timedelta
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-import httpx
 from jwt import InvalidTokenError
 from pydantic import AfterValidator
 from tortoise.transactions import in_transaction
 
 from auth_api.data.entities.data_user_credentials import DataUserCredentials
-from shared.lib.HTTPException_utils import (
-    raise_if_user_has_no_permissions,
-    invalid_credentials_exception,
-    email_already_exists_exception,
-    invalid_login_credentials_exception,
+from auth_api.data.mapper_utils import data_user_credentials_to_model
+from auth_api.data.query_utils import (
+    select_user_credentials_by_email_async,
+    select_user_credentials_by_user_ulid_async,
+)
+from shared.clients.users_client import (
+    create_user_with_client_async,
+    delete_user_with_client_async,
 )
 from shared.lib.constants import (
     JWT_EXPIRE_MINUTES,
 )
 from shared.lib.crypto import hash_password, verify_password
 from shared.lib.fastapi_utils import request_is_internal_api_key_valid
+from shared.lib.HTTPException_utils import (
+    email_already_exists_exception,
+    invalid_credentials_exception,
+    invalid_login_credentials_exception,
+    raise_if_user_has_no_permissions,
+)
 from shared.lib.jwt_utils import (
     create_access_token,
     decode_token,
     is_user_jwt_admin,
 )
 from shared.lib.ulid_validators import validate_str_ulid
-from data.query_utils import (
-    select_user_credentials_by_email_async,
-    select_user_credentials_by_user_ulid_async,
-)
 from shared.models.auth_dtos import (
     LoginUser,
     LoginUserResponse,
     RegisterUser,
     UserCredentials,
 )
-from shared.models.mapper_utils import data_user_credentials_to_model
-from shared.models.status_response_dto import StatusResponse
 from shared.models.jwt_dtos import JwtToken, JwtTokenDataInput
-from users_api.clients.users import (
-    create_user_with_client_async,
-    delete_user_with_client_async,
-)
+from shared.models.status_response_dto import StatusResponse
 
 api_auth_router = APIRouter(prefix="/auth")
 

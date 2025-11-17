@@ -1,31 +1,29 @@
 from typing import Annotated
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.security import OAuth2PasswordBearer
-import httpx
 from jwt import InvalidTokenError
 from pydantic import AfterValidator
 
-from data.entities.data_user import DataUser
-from shared.lib.HTTPException_utils import (
-    raise_if_user_has_no_permissions,
-    user_has_no_permissions_exception,
-)
 from shared.lib.constants import (
     AUTH_API_URL,
     INTERNAL_API_KEY,
     INTERNAL_API_KEY_HEADER_NAME,
 )
 from shared.lib.fastapi_utils import request_is_internal_api_key_valid
+from shared.lib.HTTPException_utils import (
+    invalid_credentials_exception,
+    raise_if_user_has_no_permissions,
+    user_has_no_permissions_exception,
+)
 from shared.lib.jwt_utils import decode_token, is_user_jwt_admin
 from shared.lib.ulid_validators import validate_str_ulid
-from shared.lib.HTTPException_utils import invalid_credentials_exception
 from shared.models.auth_dtos import UserCredentials
 from shared.models.status_response_dto import StatusResponse
-from shared.models.mapper_utils import (
-    data_user_to_model,
-    update_data_user_from_model,
-)
 from shared.models.user_dto import User
+from users_api.data.entities.data_user import DataUser
+from users_api.data.mapper_utils import data_user_to_model, update_data_user_from_model
 from users_api.data.query_utils import (
     select_user_by_ulid_async,
 )

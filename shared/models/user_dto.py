@@ -1,7 +1,8 @@
 from typing import Annotated
+
 from pydantic import AfterValidator, BaseModel
 
-from lib.ulid_validators import validate_str_ulid
+from shared.lib.ulid_validators import validate_str_ulid
 from shared.models.auth_dtos import UserCredentials
 
 
