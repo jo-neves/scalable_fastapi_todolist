@@ -1,0 +1,15 @@
+[project]
+name = "todo_api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "argon2-cffi>=25.1.0",
+    "fastapi[standard]>=0.121.3",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.2.1",
+    "python-ulid>=3.1.0",
+    "tortoise-orm>=0.25.1",
+    "uvicorn[standard]>=0.38.0",
+]
