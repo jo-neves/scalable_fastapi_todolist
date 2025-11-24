@@ -1,5 +1,7 @@
 # TODO
 
-- Add caching.
-  - User and user email.
+- Update the README.
 - Add queues for microservices communications.
+  - Add Outbox Pattern.
+- Add Email service (triggered by user creation).
+- Add Observability (OpenTelemetry, Grafana + Prometheus, Loki)
