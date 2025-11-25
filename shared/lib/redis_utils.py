@@ -9,7 +9,7 @@ def init_redis_client(redis_host: str, redis_port: int):
         _redis_client = Redis(host=redis_host, port=redis_port, db=0)
 
 
-async def get_redis_client_async() -> Redis:
+def get_redis_client() -> Redis:
     if _redis_client is None:
         raise RuntimeError("Redis not initialized")
 

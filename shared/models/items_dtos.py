@@ -1,16 +1,14 @@
-from typing import Annotated
+from pydantic import BaseModel
 
-from pydantic import AfterValidator, BaseModel
-
-from shared.lib.ulid_validators import validate_str_ulid
+from shared.lib.types import UlidStr
 
 
 class NewItem(BaseModel):
-    user_ulid: Annotated[str, AfterValidator(validate_str_ulid)]
+    user_ulid: UlidStr
     title: str
     description: str
     done: bool = False
 
 
 class Item(NewItem):
-    ulid: Annotated[str, AfterValidator(validate_str_ulid)]
+    ulid: UlidStr

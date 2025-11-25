@@ -6,7 +6,7 @@ from jwt import InvalidTokenError
 from pydantic import AfterValidator
 from tortoise.transactions import in_transaction
 
-from shared.clients.users_client import get_user_by_ulid_async
+from shared.http_clients.users_client import get_user_by_ulid_async
 from shared.lib.HTTPException_utils import (
     invalid_credentials_exception,
     raise_if_user_has_no_permissions,

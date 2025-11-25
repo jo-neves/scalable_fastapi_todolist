@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from types import ModuleType
-from typing import Iterable
+from typing import Awaitable, Callable, Iterable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +10,7 @@ from tortoise.contrib.fastapi import RegisterTortoise
 from shared.lib.application_variables import ApplicationVariables
 from shared.lib.constants import INTERNAL_API_KEY_HEADER_NAME
 from shared.lib.fs_utils import working_dir_endswith
-from shared.lib.redis_utils import _redis_client, close_redis_async, init_redis_client
+from shared.lib.redis_utils import close_redis_async, init_redis_client
 
 
 def app_lifespan(
@@ -18,6 +18,8 @@ def app_lifespan(
     modules: dict[str, Iterable[str | ModuleType]] | None,
     db_url: str | None = None,
     use_redis: bool = False,
+    additional_app_on_init_async: Callable[[FastAPI], Awaitable[None]] | None = None,
+    additional_app_on_exit_async: Callable[[FastAPI], Awaitable[None]] | None = None,
 ):
     @asynccontextmanager
     async def lifespan_async(app: FastAPI):
@@ -38,7 +40,13 @@ def app_lifespan(
             add_exception_handlers=True,
             generate_schemas=True,
         ):
+            if additional_app_on_init_async:
+                await additional_app_on_init_async(app)
+
             yield
+
+            if additional_app_on_exit_async:
+                await additional_app_on_exit_async(app)
             if use_redis:
                 await close_redis_async()
 

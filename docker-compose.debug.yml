@@ -8,6 +8,14 @@ services:
     networks:
       - todolist_backend
 
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672" # dashboard
+    networks:
+      - todolist_backend
+
   auth_api:
     container_name: auth_api
     depends_on:

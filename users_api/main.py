@@ -1,22 +1,38 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from routers.users import api_users_router
 from tortoise.contrib.fastapi import tortoise_exception_handlers
 
-from users_api.routers.auth_proxy import api_auth_router
-from routers.users import api_users_router
+from shared.lib.constants import APP_NAME_USERS_API
 from shared.lib.fastapi_utils import app_add_cors, app_lifespan
+from shared.queue_consumers.user_credentials_consumers import (
+    consume_user_credentials_created_async,
+)
+from users_api.queuing.user_credentials_handlers import (
+    handle_user_credentials_created_async,
+)
+from users_api.routers.auth_proxy import api_auth_router
+
+
+async def app_on_init_async(_: FastAPI):
+    await consume_user_credentials_created_async(
+        app_name=APP_NAME_USERS_API, async_handler=handle_user_credentials_created_async
+    )
+
 
 load_dotenv()
 
+
 app = FastAPI(
     lifespan=app_lifespan(
-        app_folder="users_api",
+        app_folder=APP_NAME_USERS_API,
         modules={
             "entities": [
-                "users_api.data.entities.data_user",
+                f"{APP_NAME_USERS_API}.data.entities.data_user",
             ]
         },
         use_redis=True,
+        additional_app_on_init_async=app_on_init_async,
     ),
     exception_handlers=tortoise_exception_handlers(),
 )

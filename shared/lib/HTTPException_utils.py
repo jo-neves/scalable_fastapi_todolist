@@ -1,5 +1,10 @@
 from fastapi import HTTPException, status
 
+internal_server_error_exception = HTTPException(
+    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    detail="Internal Server Error",
+)
+
 invalid_credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail="Could not validate credentials",
