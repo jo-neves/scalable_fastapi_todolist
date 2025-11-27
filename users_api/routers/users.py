@@ -7,7 +7,7 @@ from pydantic import AfterValidator
 from redis.asyncio import Redis
 from tortoise.transactions import in_transaction
 
-from shared.clients.auth_client import get_user_credentials_async
+from shared.http_clients.auth_client import get_user_credentials_async
 from shared.lib.fastapi_utils import request_is_internal_api_key_valid
 from shared.lib.HTTPException_utils import (
     invalid_credentials_exception,
@@ -16,7 +16,7 @@ from shared.lib.HTTPException_utils import (
     user_not_found_exception,
 )
 from shared.lib.jwt_utils import decode_token, is_user_jwt_admin
-from shared.lib.redis_utils import get_redis_client_async
+from shared.lib.redis_utils import get_redis_client
 from shared.lib.ulid_validators import validate_str_ulid
 from shared.models.auth_dtos import UserCredentials
 from shared.models.jwt_dtos import JwtTokenData
@@ -62,9 +62,14 @@ async def get_jwt_data_user_async(
 
 async def get_jwt_user_async(
     token_data: Annotated[JwtTokenData, Depends(get_token_data)],
-    redis: Annotated[Redis, Depends(get_redis_client_async)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> User:
-    return await get_cached_user_async(redis, token_data.sub)
+    user = await get_cached_user_async(redis, token_data.sub)
+
+    if not user:
+        user = data_user_to_model(await get_jwt_data_user_async(token_data))
+
+    return user
 
 
 # TODO: add pagination.
@@ -104,37 +109,12 @@ async def get_user(
     )
 
 
-@api_users_router.post("/")
-async def create_user(
-    request: Request, redis: Annotated[Redis, Depends(get_redis_client_async)]
-) -> StatusResponse[User]:
-    if not request_is_internal_api_key_valid(request):
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    async with in_transaction():
-        try:
-            new_user = await DataUser.create()
-            user = data_user_to_model(new_user)
-            await set_cached_user_async(redis, new_user.ulid, user)
-
-        except Exception:
-            raise HTTPException(
-                status_code=500, detail="Something went wrong during user creation.",
-            )
-
-    return StatusResponse(
-        status_code=201,
-        message=f"User '{new_user.ulid}' created",
-        content=user,
-    )
-
-
 @api_users_router.put("/{user_ulid}")
 async def update_user(
     user_ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     user_model: User,
     current_data_user: Annotated[DataUser, Depends(get_jwt_data_user_async)],
-    redis: Annotated[Redis, Depends(get_redis_client_async)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> StatusResponse[User]:
     raise_if_user_has_no_permissions(
         token_user_ulid=current_data_user.ulid, request_user_ulid=user_ulid
@@ -164,7 +144,7 @@ async def update_user(
 async def delete_user(
     user_ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     request: Request,
-    redis: Annotated[Redis, Depends(get_redis_client_async)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> StatusResponse:
     if not request_is_internal_api_key_valid(request):
         raise HTTPException(status_code=403, detail="Forbidden")

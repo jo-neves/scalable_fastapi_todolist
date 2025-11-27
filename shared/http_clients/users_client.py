@@ -20,26 +20,6 @@ async def get_user_by_ulid_async(user_ulid: str, token: str) -> StatusResponse[U
         return StatusResponse[User](**user_response.json())
 
 
-async def create_user_by_ulid_async() -> StatusResponse[User]:
-    async with httpx.AsyncClient() as client:
-        return await create_user_with_client_async(client)
-
-
-async def create_user_with_client_async(
-    client: httpx.AsyncClient,
-) -> StatusResponse[User]:
-    create_response = await client.post(
-        f"{ApplicationVariables.USERS_API_PRIVATE_URL()}/api/v1/users/",
-        headers={
-            INTERNAL_API_KEY_HEADER_NAME: ApplicationVariables.INTERNAL_API_KEY() or ""
-        },
-    )
-
-    create_response.raise_for_status()
-
-    return StatusResponse[User](**create_response.json())
-
-
 async def delete_user_with_client_async(
     client: httpx.AsyncClient, user_ulid: str
 ) -> StatusResponse:

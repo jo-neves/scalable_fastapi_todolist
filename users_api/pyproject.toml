@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "aio-pika>=9.5.8",
     "argon2-cffi>=25.1.0",
     "fastapi[standard]>=0.121.3",
     "pyjwt>=2.10.1",

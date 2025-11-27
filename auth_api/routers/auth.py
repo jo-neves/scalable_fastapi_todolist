@@ -1,13 +1,13 @@
 from datetime import timedelta
 from typing import Annotated
 
-import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt import InvalidTokenError
 from pydantic import AfterValidator
 from redis.asyncio import Redis
 from tortoise.transactions import in_transaction
+from ulid import ULID
 
 from auth_api.data.db_query_utils import (
     select_user_credentials_by_email_async,
@@ -16,13 +16,14 @@ from auth_api.data.db_query_utils import (
 from auth_api.data.entities.data_user_credentials import DataUserCredentials
 from auth_api.data.mapper_utils import data_user_credentials_to_model
 from auth_api.data.redis_query_utils import (
+    delete_cached_user_credentials_async,
     get_cached_user_credentials_async,
     set_cached_user_credentials_async,
 )
-from shared.clients.users_client import (
-    create_user_with_client_async,
-    delete_user_with_client_async,
+from auth_api.queuing.user_credentials_publisher import (
+    publish_user_credentials_created_async,
 )
+from shared.event_models.user_credentials import UserCredentialsCreated
 from shared.lib.application_variables import ApplicationVariables
 from shared.lib.crypto import hash_password, verify_password
 from shared.lib.HTTPException_utils import (
@@ -36,7 +37,7 @@ from shared.lib.jwt_utils import (
     decode_token,
     is_user_jwt_admin,
 )
-from shared.lib.redis_utils import get_redis_client_async
+from shared.lib.redis_utils import get_redis_client
 from shared.lib.ulid_validators import validate_str_ulid
 from shared.models.auth_dtos import (
     LoginUser,
@@ -69,11 +70,13 @@ async def get_jwt_data_user_credentials_async(
     except InvalidTokenError:
         raise invalid_credentials_exception
 
-    user = await select_user_credentials_by_user_ulid_async(token_data.sub)
-    if user is None:
+    data_user_credentials = await select_user_credentials_by_user_ulid_async(
+        token_data.sub
+    )
+    if data_user_credentials is None:
         raise invalid_credentials_exception
 
-    return user
+    return data_user_credentials
 
 
 async def get_jwt_user_credentials_async(
@@ -87,7 +90,7 @@ async def get_jwt_user_credentials_async(
 async def get_user_credentials(
     ulid: Annotated[str, Path(), AfterValidator(validate_str_ulid)],
     x_internal_api_key: Annotated[str, Header()],
-    redis: Annotated[Redis, Depends(get_redis_client_async)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> StatusResponse[UserCredentials]:
     if x_internal_api_key != ApplicationVariables.INTERNAL_API_KEY():
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -122,7 +125,7 @@ async def get_user_credentials(
 @api_auth_router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user(
     register_user_model: RegisterUser,
-    redis: Annotated[Redis, Depends(get_redis_client_async)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> StatusResponse:
     data_user_credentials = await select_user_credentials_by_email_async(
         register_user_model.email
@@ -131,37 +134,34 @@ async def create_user(
         raise email_already_exists_exception
 
     async with in_transaction():
-        new_user = None
-        new_user_ulid = None
-        async with httpx.AsyncClient() as client:
-            try:
-                new_user = await create_user_with_client_async(client)
-                new_user_ulid = new_user.content.ulid if new_user.content else ""
+        (hash, salt) = hash_password(register_user_model.password)
 
-                (hash, salt) = hash_password(register_user_model.password)
-
-                data_user_credentials = await DataUserCredentials.create(
-                    user_ulid=new_user_ulid,
-                    email=register_user_model.email,
-                    password_hash=hash,
-                    salt=salt,
-                )
-
-                user_credentials = data_user_credentials_to_model(data_user_credentials)
-                await set_cached_user_credentials_async(
-                    redis, new_user_ulid, user_credentials
-                )
-            except Exception as e:
-                if new_user is not None and new_user_ulid is not None:
-                    await delete_user_with_client_async(client, new_user_ulid)
-                raise e
-
-    if new_user is None:
-        raise HTTPException(
-            status_code=500, detail="An error occurred. User not created"
+        temp_user_ulid = ULID()
+        data_user_credentials = await DataUserCredentials.create(
+            user_ulid=temp_user_ulid,
+            email=register_user_model.email,
+            password_hash=hash,
+            salt=salt,
         )
 
-    return StatusResponse(status_code=201, message=f"User {new_user_ulid} created")
+        temp_user_ulid_str = str(temp_user_ulid)
+        user_credentials = data_user_credentials_to_model(data_user_credentials)
+
+        await set_cached_user_credentials_async(
+            redis, temp_user_ulid_str, user_credentials
+        )
+
+        try:
+            await publish_user_credentials_created_async(
+                UserCredentialsCreated(temp_user_ulid=temp_user_ulid_str)
+            )
+        except Exception as e:
+            await delete_cached_user_credentials_async(redis, temp_user_ulid_str)
+            raise e
+
+    return StatusResponse(
+        status_code=201, message=f"User with temp ULID '{temp_user_ulid}' created"
+    )
 
 
 @api_auth_router.put("/{user_ulid}/credentials")
@@ -171,7 +171,7 @@ async def update_user_credentials(
     current_data_user_credentials: Annotated[
         DataUserCredentials, Depends(get_jwt_data_user_credentials_async)
     ],
-    redis: Annotated[Redis, Depends(get_redis_client_async)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> StatusResponse:
     raise_if_user_has_no_permissions(
         token_user_ulid=current_data_user_credentials.user_ulid,

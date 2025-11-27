@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 
-from shared.clients.auth_client import login_user_async
+from shared.http_clients.auth_client import login_user_async
 from shared.models.jwt_dtos import JwtToken
 
 api_auth_router = APIRouter(prefix="/auth")

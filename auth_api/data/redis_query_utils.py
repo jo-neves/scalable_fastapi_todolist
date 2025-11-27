@@ -16,3 +16,7 @@ async def set_cached_user_credentials_async(
         user_credentials.model_dump_json(),
         ex=ONE_DAY_IN_SECONDS,
     )
+
+
+async def delete_cached_user_credentials_async(redis_client: Redis, user_ulid: str):
+    await redis_client.delete(f"user_credentials:{user_ulid}")

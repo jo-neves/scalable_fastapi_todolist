@@ -1,3 +1,10 @@
+APP_NAME_AUTH_API = "auth_api"
+APP_NAME_USERS_API = "users_api"
+APP_NAME_TODO_API = "todo_api"
+EXCHANGE_USER_CREDENTIALS = "user_credentials"
+EXCHANGE_USERS = "users"
+TOPIC_USER_CREDENTIALS_CREATED = "user_credentials.created"
+TOPIC_USER_CREATED = "user.created"
 INTERNAL_API_KEY_HEADER_NAME = "x-internal-api-key"
 DEFAULT_JWT_EXPIRE_MINUTES = 1440  # 1 day.
 ONE_DAY_IN_SECONDS = 86400
