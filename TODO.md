@@ -1,6 +1,5 @@
 # TODO
 
-- Add queues for microservices communications.
-  - Add Outbox Pattern.
-- Add Email service (triggered by user creation).
+- Add integration tests
+- Add unit tests
 - Add Observability (OpenTelemetry, Grafana + Prometheus, Loki)
